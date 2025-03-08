@@ -1,12 +1,10 @@
 {
-  "dependencies": {
-    "typescript": "^5.8.2"
-  },
+  "dependencies": {},
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
     "@types/bun": "^1.2.4",
     "@types/chrome": "^0.0.308",
-    "@types/node": "^22.13.9",
+    "@types/node": "^22.13.10",
     "node-html-parser": "^7.0.1",
     "prettier": "^3.5.3"
   },
