@@ -1,0 +1,19 @@
+# prettier ignores files setup in .gitignore
+
+*.js
+*.jsx
+*.ts
+*.tsx
+
+*.json
+*.jsonc
+
+coverage/
+docs/
+examples/
+
+*-lock.yaml
+
+# miscellaneous
+out/
+src/lib/ericchase/
