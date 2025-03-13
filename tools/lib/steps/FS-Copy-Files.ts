@@ -15,8 +15,16 @@ class CBuildStep_FSCopyFiles implements BuildStep {
     },
   ) {}
   async run(builder: BuilderInternal) {
+    try {
+      await builder.platform.Path.getStats(this.options.from);
+    } catch (error) {
+      throw new Error(`The "from" path ("${this.options.from.raw}") does not exist.`);
+    }
+    await builder.platform.Directory.create(this.options.to);
+
     const set_from = await globScan(builder.platform, this.options.from, this.options.include_patterns, this.options.exclude_patterns);
     const set_to = await globScan(builder.platform, this.options.to, this.options.include_patterns, this.options.exclude_patterns);
+
     // copy all files that are missing
     for (const path of set_from.difference(set_to)) {
       const from = Path(this.options.from, path);
@@ -25,6 +33,7 @@ class CBuildStep_FSCopyFiles implements BuildStep {
         ConsoleLog(`Copied "${from.raw}" -> "${to.raw}"`);
       }
     }
+
     // check matching files for modification
     for (const path of set_from.intersection(set_to)) {
       const from = Path(this.options.from, path);
