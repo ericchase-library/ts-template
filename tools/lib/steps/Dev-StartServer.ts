@@ -15,7 +15,7 @@ class CStep_StartServer implements Step {
 
   child_process?: Subprocess<'ignore', 'pipe', 'pipe'>;
   hotreload_enabled = true;
-  server_href = '';
+  server_href?: string;
 
   async end(builder: BuilderInternal) {
     if (this.child_process !== undefined) {
@@ -81,9 +81,11 @@ class CStep_StartServer implements Step {
       });
     } else if (this.hotreload_enabled === true) {
       // trigger hot reload
-      fetch(`${this.server_href}server/reload`).catch((error) => {
-        this.channel.error(error);
-      });
+      if (this.server_href !== undefined) {
+        fetch(`${this.server_href}server/reload`).catch((error) => {
+          this.channel.error(error);
+        });
+      }
     }
   }
 }
