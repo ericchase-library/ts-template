@@ -13,16 +13,15 @@ builder.setStartupSteps([
   Step_Bun_Run({ cmd: ['bun', 'install'] }),
   Step_CleanDirectory(builder.dir.out),
   Step_Format(),
+  //
+]);
+
+builder.setBeforeProcessingSteps([]);
+builder.setProcessorModules([]);
+builder.setAfterProcessingSteps([
   Step_StartServer(),
   //
 ]);
-
-builder.setProcessorModules([
-  //
-]);
-
-builder.setCleanupSteps([
-  //
-]);
+builder.setCleanupSteps([]);
 
 await builder.start();
