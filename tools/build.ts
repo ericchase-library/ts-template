@@ -1,8 +1,8 @@
-import { Builder } from 'tools/lib/Builder.js';
-import { Step_Bun_Run } from 'tools/lib/steps/Bun-Run.js';
-import { Step_StartServer } from 'tools/lib/steps/Dev-StartServer.js';
-import { Step_CleanDirectory } from 'tools/lib/steps/FS-CleanDirectory.js';
-import { Step_Format } from 'tools/lib/steps/FS-Format.js';
+import { Builder } from './lib/Builder.js';
+import { Step_Bun_Run } from './lib/steps/Bun-Run.js';
+import { Step_StartServer } from './lib/steps/Dev-StartServer.js';
+import { Step_CleanDirectory } from './lib/steps/FS-CleanDirectory.js';
+import { Step_Format } from './lib/steps/FS-Format.js';
 
 // Use command line arguments to set watch mode.
 const builder = new Builder(Bun.argv[2] === '--watch' ? 'watch' : 'build');
@@ -15,14 +15,16 @@ builder.setStartupSteps([
   //
 ]);
 
-// These steps are run before each processing phase.
+// These steps are run before each processing phase, only if there are
+// processors to run.
 builder.setBeforeProcessingSteps([]);
 
 // The processors are run for every file that added them during every
 // processing phase.
 builder.setProcessorModules([]);
 
-// These steps are run after each processing phase.
+// These steps are run after each processing phase, only if there are
+// processors to run.
 builder.setAfterProcessingSteps([
   // During "dev" mode (when "--watch" is passed as an argument), the server
   // will start running with hot refreshing if enabled in your index file.
