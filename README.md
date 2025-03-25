@@ -38,6 +38,12 @@ For final builds:
 bun run build
 ```
 
+**Run the Biome linter**
+
+```
+bun run lint
+```
+
 ## Project Structure
 
 ### ./src/
