@@ -1,6 +1,5 @@
 import { Builder } from './lib/Builder.js';
 import { Step_Bun_Run } from './lib/steps/Bun-Run.js';
-import { Step_StartServer } from './lib/steps/Dev-StartServer.js';
 import { Step_CleanDirectory } from './lib/steps/FS-CleanDirectory.js';
 import { Step_Format } from './lib/steps/FS-Format.js';
 
@@ -25,12 +24,7 @@ builder.setProcessorModules();
 
 // These steps are run after each processing phase, only if there are
 // processors to run.
-builder.setAfterProcessingSteps(
-  // During "dev" mode (when "--watch" is passed as an argument), the server
-  // will start running with hot refreshing if enabled in your index file.
-  Step_StartServer(),
-  //
-);
+builder.setAfterProcessingSteps();
 
 // These steps are run during the shutdown phase only.
 builder.setCleanupSteps();
