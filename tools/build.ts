@@ -14,16 +14,14 @@ builder.setStartupSteps(
   //
 );
 
-// These steps are run before each processing phase, only if there are
-// processors to run.
+// These steps are run before each processing phase.
 builder.setBeforeProcessingSteps();
 
 // The processors are run for every file that added them during every
 // processing phase.
 builder.setProcessorModules();
 
-// These steps are run after each processing phase, only if there are
-// processors to run.
+// These steps are run after each processing phase.
 builder.setAfterProcessingSteps();
 
 // These steps are run during the shutdown phase only.
