@@ -1,8 +1,14 @@
 ## About
 
-- https://github.com/ericchase-library/ts-template
+https://github.com/ericchase-library/ts-template
 
-This project houses the base TypeScript template project that I use to create other TypeScript template projects. Please read the `README.md` file at https://github.com/ericchase-library/ts-library for more information.
+This project houses the base TypeScript template project that I use to create new TypeScript template projects.
+
+## TypeScript Library
+
+Please visit the base TypeScript library project for more information about my TypeScript library and template projects:
+
+- https://github.com/ericchase-library/ts-library
 
 ## Disclaimer
 
