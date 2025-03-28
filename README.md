@@ -6,7 +6,7 @@ This project houses the base TypeScript template project that I use to create ne
 
 ## TypeScript Library
 
-Please visit the base TypeScript library project for more information about my TypeScript library and template projects:
+For more information about my TypeScript library, please visit:
 
 - https://github.com/ericchase-library/ts-library
 
