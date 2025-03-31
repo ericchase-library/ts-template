@@ -7,7 +7,7 @@ import { Step_Format } from './lib/steps/FS-Format.js';
 const builder = new Builder(Bun.argv[2] === '--watch' ? 'watch' : 'build');
 
 // These steps are run during the startup phase only.
-builder.setStartupSteps(
+builder.setStartUpSteps(
   Step_Bun_Run({ cmd: ['bun', 'install'] }, 'quiet'),
   Step_CleanDirectory(builder.dir.out),
   Step_Format('quiet'),
@@ -25,6 +25,6 @@ builder.setProcessorModules();
 builder.setAfterProcessingSteps();
 
 // These steps are run during the shutdown phase only.
-builder.setCleanupSteps();
+builder.setCleanUpSteps();
 
 await builder.start();
