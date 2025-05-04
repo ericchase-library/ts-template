@@ -5,7 +5,7 @@
   },
   "formatter": {
     "enabled": true,
-    "ignore": ["node_modules", "*-lock.json", "out/", "*.js"],
+    "ignore": ["node_modules", "*-lock.json", "src/lib/ericchase/"],
     "attributePosition": "auto",
     "formatWithErrors": true,
     "indentStyle": "space",
@@ -43,29 +43,22 @@
   },
   "linter": {
     "enabled": true,
-    "ignore": ["node_modules", "*-lock.json", "out/", "*.js", "*.d.ts"],
+    "ignore": ["node_modules", "*-lock.json", "src/lib/ericchase/"],
     "rules": {
       "complexity": {
         "noBannedTypes": "off",
-        "noStaticOnlyClass": "off",
         "noUselessConstructor": "off",
-        "noUselessLoneBlockStatements": "off",
-        "noUselessTernary": "off",
-        "useLiteralKeys": "off"
+        "noUselessTernary": "off"
       },
       "style": {
         "noParameterAssign": "off",
-        "noUselessElse": "off",
         "useConst": "off",
-        "useEnumInitializers": "off",
         "useImportType": "off"
       },
       "suspicious": {
         "noConfusingVoidType": "off",
         "noEmptyInterface": "off",
-        "noExplicitAny": "off",
-        "noFocusedTests": "off",
-        "noShadowRestrictedNames": "off"
+        "noExplicitAny": "off"
       }
     }
   },
