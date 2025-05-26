@@ -1,12 +1,12 @@
 import { query } from './db.js';
-import { Core } from './lib/ericchase/core.js';
+import { Core_Console_Log } from './lib/ericchase/core.js';
 
 export async function post(req: Request, url: URL, pathname: string): Promise<Response | undefined> {
-  Core.Console.Log(`POST     ${pathname}`);
+  Core_Console_Log(`POST     ${pathname}`);
 
-  // Core.Console.Log(`HEADERS`);
+  // Core_Console_Log(`HEADERS`);
   // for (const [k, v] of req.headers) {
-  //   Core.Console.Log(`    ${k}: ${v}`);
+  //   Core_Console_Log(`    ${k}: ${v}`);
   // }
 
   // custom routing here
@@ -21,8 +21,9 @@ export async function post(req: Request, url: URL, pathname: string): Promise<Re
             'Content-Type': 'application/json',
           },
         });
-      } catch (error) {
-        return new Response(JSON.stringify(error), {
+      } catch (error: any) {
+        console.error(error);
+        return new Response(JSON.stringify('Internal Server Error: Check server logs.'), {
           headers: {
             'Access-Control-Allow-Origin': '*',
             'Content-Type': 'application/json',

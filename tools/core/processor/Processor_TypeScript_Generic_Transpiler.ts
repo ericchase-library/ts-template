@@ -1,13 +1,7 @@
-import { BunPlatform } from '../../../src/lib/ericchase/platform-bun.js';
-import { NodePlatform } from '../../../src/lib/ericchase/platform-node.js';
+import { BunPlatform_Glob_Ex_Match } from '../../../src/lib/ericchase/platform-bun.js';
+import { NodePlatform_Path_NewExtension } from '../../../src/lib/ericchase/platform-node.js';
 import { Builder } from '../../core/Builder.js';
 import { Logger } from '../../core/Logger.js';
-
-type Options = Bun.TranspilerOptions;
-interface Config {
-  define?: Options['define'] | (() => Options['define']);
-  target?: Options['target'];
-}
 
 export function Processor_TypeScript_Generic_Transpiler(include_patterns: string[], exclude_patterns: string[], config: Config): Builder.Processor {
   return new Class(include_patterns, exclude_patterns, config);
@@ -23,8 +17,8 @@ class Class implements Builder.Processor {
   ) {}
   async onAdd(builder: Builder.Internal, files: Set<Builder.SourceFile>): Promise<void> {
     for (const file of files) {
-      if (BunPlatform.Glob.Ex.Match(file.src_path.toStandard(), this.include_patterns, this.exclude_patterns) === true) {
-        file.out_path.value = NodePlatform.Path.NewExtension(file.out_path.value, '.js');
+      if (BunPlatform_Glob_Ex_Match(file.src_path.toStandard(), this.include_patterns, this.exclude_patterns) === true) {
+        file.out_path.value = NodePlatform_Path_NewExtension(file.out_path.value, '.js');
         file.addProcessor(this, this.onProcess);
       }
     }
@@ -52,3 +46,8 @@ class Class implements Builder.Processor {
     }
   }
 }
+interface Config {
+  define?: Options['define'] | (() => Options['define']);
+  target?: Options['target'];
+}
+type Options = Bun.TranspilerOptions;

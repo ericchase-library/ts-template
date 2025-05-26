@@ -1,13 +1,14 @@
-import { BunPlatform } from '../src/lib/ericchase/platform-bun.js';
+import { BunPlatform_Args_Has } from '../src/lib/ericchase/platform-bun.js';
 import { Builder } from './core/Builder.js';
 import { Step_Bun_Run } from './core/step/Step_Bun_Run.js';
-import { Step_Dev_Format } from './core/step/Step_Dev_Format.js';
-import { Step_Dev_Lint } from './core/step/Step_Dev_Lint.js';
 import { Step_FS_Clean_Directory } from './core/step/Step_FS_Clean_Directory.js';
+import { Step_Dev_Format } from './lib-dev/step/Step_Dev_Format.js';
+import { Step_Dev_Lint } from './lib-dev/step/Step_Dev_Lint.js';
 import { Step_Dev_Server } from './lib-web/step/Step_Dev_Server.js';
 
+// Use command line arguments to set dev mode.
 const builder = Builder({
-  mode: BunPlatform.Args.Has('--dev') ? Builder.BUILD_MODE.DEV : Builder.BUILD_MODE.BUILD,
+  mode: BunPlatform_Args_Has('--dev') ? Builder.BUILD_MODE.DEV : Builder.BUILD_MODE.BUILD,
   verbosity: Builder.LOG_VERBOSITY._1_LOG,
 });
 
