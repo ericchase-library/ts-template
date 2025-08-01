@@ -1,11 +1,12 @@
-import { NodePlatform_Directory_Async_ReadDir, NodePlatform_Path_Join } from '../../../src/lib/ericchase/platform-node.js';
+import { NODE_PATH } from '../../../src/lib/ericchase/NodePlatform.js';
+import { Async_NodePlatform_Directory_ReadDir } from '../../../src/lib/ericchase/NodePlatform_Directory_ReadDir.js';
 import { Builder } from '../../core/Builder.js';
 import { Logger } from '../../core/Logger.js';
 import { Step_FS_Copy_Files } from '../../core/step/Step_FS_Copy_Files.js';
 import { Step_FS_Mirror_Directory } from '../../core/step/Step_FS_Mirror_Directory.js';
 
-export function Step_Dev_Project_Sync_Lib(from_directory: string, to_directory: string): Builder.Step {
-  return new Class(from_directory, to_directory);
+export function Step_Dev_Project_Sync_Lib(params: { from: string; to: string }): Builder.Step {
+  return new Class(params.from, params.to);
 }
 class Class implements Builder.Step {
   StepName = Step_Dev_Project_Sync_Lib.name;
@@ -14,34 +15,34 @@ class Class implements Builder.Step {
   steps: Builder.Step[] = [];
 
   constructor(
-    readonly from_directory: string,
-    readonly to_directory: string,
+    readonly from: string,
+    readonly to: string,
   ) {}
-  async onStartUp(builder: Builder.Internal): Promise<void> {
+  async onStartUp(): Promise<void> {
     this.steps = [
       Step_FS_Copy_Files({
-        from: NodePlatform_Path_Join(this.from_directory, builder.dir.src, '@types'),
-        to: NodePlatform_Path_Join(this.to_directory, builder.dir.src, '@types'),
+        from: NODE_PATH.join(this.from, Builder.Dir.Src, '@types'),
+        to: NODE_PATH.join(this.to, Builder.Dir.Src, '@types'),
         include_patterns: ['**/*'],
         exclude_patterns: ['**/*{.deprecated,.example,.test}.ts'],
       }),
       Step_FS_Mirror_Directory({
-        from: NodePlatform_Path_Join(this.from_directory, builder.dir.lib, 'ericchase'),
-        to: NodePlatform_Path_Join(this.to_directory, builder.dir.lib, 'ericchase'),
+        from: NODE_PATH.join(this.from, Builder.Dir.Lib, 'ericchase'),
+        to: NODE_PATH.join(this.to, Builder.Dir.Lib, 'ericchase'),
         include_patterns: ['**/*'],
         exclude_patterns: ['**/*{.deprecated,.example,.test}.ts'],
       }),
       // Loose Files
       Step_FS_Copy_Files({
-        from: NodePlatform_Path_Join(this.from_directory),
-        to: NodePlatform_Path_Join(this.to_directory),
+        from: NODE_PATH.join(this.from),
+        to: NODE_PATH.join(this.to),
         include_patterns: [
           '.vscode/settings.json',
           '.gitignore',
           '.prettierignore',
           '.prettierrc',
           'index.html',
-          'biome.json',
+          // 'biome.json',
           'package.json',
           'tsconfig.json',
           //
@@ -49,8 +50,8 @@ class Class implements Builder.Step {
         overwrite: false,
       }),
       Step_FS_Copy_Files({
-        from: NodePlatform_Path_Join(this.from_directory, builder.dir.tools),
-        to: NodePlatform_Path_Join(this.to_directory, builder.dir.tools),
+        from: NODE_PATH.join(this.from, Builder.Dir.Tools),
+        to: NODE_PATH.join(this.to, Builder.Dir.Tools),
         include_patterns: [
           'pull.ts',
           //
@@ -59,19 +60,20 @@ class Class implements Builder.Step {
       }),
       // Server
       Step_FS_Mirror_Directory({
-        from: NodePlatform_Path_Join(this.from_directory, 'server'),
-        to: NodePlatform_Path_Join(this.to_directory, 'server'),
+        from: NODE_PATH.join(this.from, 'server'),
+        to: NODE_PATH.join(this.to, 'server'),
         include_patterns: ['**/*'],
         exclude_patterns: ['.git/**/*', 'node_modules/**/*'],
       }),
     ];
     // Tools
-    for (const entry of await NodePlatform_Directory_Async_ReadDir(builder.dir.tools, false)) {
+    const { value: entries } = await Async_NodePlatform_Directory_ReadDir(Builder.Dir.Tools, false);
+    for (const entry of entries ?? []) {
       if (entry.isDirectory()) {
         this.steps.push(
           Step_FS_Mirror_Directory({
-            from: NodePlatform_Path_Join(this.from_directory, entry.parentPath, entry.name),
-            to: NodePlatform_Path_Join(this.to_directory, entry.parentPath, entry.name),
+            from: NODE_PATH.join(this.from, entry.parentPath, entry.name),
+            to: NODE_PATH.join(this.to, entry.parentPath, entry.name),
             include_patterns: ['**/*'],
             exclude_patterns: ['**/*{.deprecated,.example,.test}.ts'],
           }),
@@ -80,17 +82,17 @@ class Class implements Builder.Step {
     }
 
     for (const step of this.steps) {
-      await step.onStartUp?.(builder);
+      await step.onStartUp?.();
     }
   }
-  async onRun(builder: Builder.Internal): Promise<void> {
+  async onRun(): Promise<void> {
     for (const step of this.steps) {
-      await step.onRun?.(builder);
+      await step.onRun?.();
     }
   }
-  async onCleanUp(builder: Builder.Internal): Promise<void> {
+  async onCleanUp(): Promise<void> {
     for (const step of this.steps) {
-      await step.onCleanUp?.(builder);
+      await step.onCleanUp?.();
     }
   }
 }

@@ -1,40 +1,39 @@
-import { BunPlatform_Args_Has } from '../src/lib/ericchase/platform-bun.js';
+import { BunPlatform_Args_Has } from '../src/lib/ericchase/BunPlatform_Args_Has.js';
 import { Builder } from './core/Builder.js';
 import { Step_Bun_Run } from './core/step/Step_Bun_Run.js';
 import { Step_FS_Clean_Directory } from './core/step/Step_FS_Clean_Directory.js';
 import { Step_Dev_Format } from './lib-dev/step/Step_Dev_Format.js';
-import { Step_Dev_Lint } from './lib-dev/step/Step_Dev_Lint.js';
 import { Step_Dev_Server } from './lib-web/step/Step_Dev_Server.js';
 
 // Use command line arguments to set dev mode.
-const builder = Builder({
-  mode: BunPlatform_Args_Has('--dev') ? Builder.BUILD_MODE.DEV : Builder.BUILD_MODE.BUILD,
-  verbosity: Builder.LOG_VERBOSITY._1_LOG,
-});
+if (BunPlatform_Args_Has('--dev')) {
+  Builder.SetMode(Builder.MODE.DEV);
+}
+// Set the logging verbosity
+Builder.SetVerbosity(Builder.VERBOSITY._1_LOG);
 
 // These steps are run during the startup phase only.
-builder.setStartUpSteps(
+Builder.SetStartUpSteps(
   Step_Bun_Run({ cmd: ['bun', 'update', '--latest'], showlogs: false }),
   Step_Bun_Run({ cmd: ['bun', 'install'], showlogs: false }),
-  Step_FS_Clean_Directory(builder.dir.out),
+  Step_FS_Clean_Directory(Builder.Dir.Out),
   Step_Dev_Format({ showlogs: false }),
-  Step_Dev_Lint({ showlogs: false }),
   //
 );
 
 // These steps are run before each processing phase.
-builder.setBeforeProcessingSteps();
+Builder.SetBeforeProcessingSteps();
 
 // The processors are run for every file that added them during every processing phase.
-builder.setProcessorModules();
+Builder.SetProcessorModules();
 
 // These steps are run after each processing phase.
-builder.setAfterProcessingSteps(
+Builder.SetAfterProcessingSteps(
   Step_Dev_Server(),
   //
 );
 
 // These steps are run during the shutdown phase only.
-builder.setCleanUpSteps();
+Builder.SetCleanUpSteps();
 
-await builder.start();
+await Builder.Start();

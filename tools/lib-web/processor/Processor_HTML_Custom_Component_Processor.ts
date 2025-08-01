@@ -1,4 +1,5 @@
-import { NodePlatform_Path_GetExtension, NodePlatform_Path_GetName, NodePlatform_Path_Join } from '../../../src/lib/ericchase/platform-node.js';
+import { NODE_PATH } from '../../../src/lib/ericchase/NodePlatform.js';
+import { NodePlatform_PathObject_Relative_Class } from '../../../src/lib/ericchase/NodePlatform_PathObject_Relative_Class.js';
 import { Builder } from '../../core/Builder.js';
 import { Logger } from '../../core/Logger.js';
 import { HTML_UTIL } from '../bundle/htmlutil.js';
@@ -10,16 +11,17 @@ class Class implements Builder.Processor {
   ProcessorName = Processor_HTML_Custom_Component_Processor.name;
   channel = Logger(this.ProcessorName).newChannel();
 
-  component_map = new Map<string, Builder.SourceFile>();
-  htmlfile_set = new Set<Builder.SourceFile>();
+  component_map = new Map<string, Builder.File>();
+  htmlfile_set = new Set<Builder.File>();
 
-  async onAdd(builder: Builder.Internal, files: Set<Builder.SourceFile>): Promise<void> {
-    const component_path = NodePlatform_Path_Join(builder.dir.lib, 'components');
+  async onAdd(files: Set<Builder.File>): Promise<void> {
+    const component_path = NODE_PATH.join(Builder.Dir.Lib, 'components');
     let trigger_reprocess = false;
     for (const file of files) {
-      if (NodePlatform_Path_GetExtension(file.src_path.value) === '.html') {
-        if (file.src_path.value.startsWith(component_path)) {
-          this.component_map.set(NodePlatform_Path_GetName(file.src_path.value), file);
+      const src_pathobject = NodePlatform_PathObject_Relative_Class(file.src_path);
+      if (src_pathobject.ext === '.html') {
+        if (file.src_path.startsWith(component_path)) {
+          this.component_map.set(src_pathobject.name, file);
           trigger_reprocess = true;
         }
         file.addProcessor(this, this.onProcess);
@@ -28,17 +30,18 @@ class Class implements Builder.Processor {
     }
     if (trigger_reprocess === true) {
       for (const file of this.htmlfile_set) {
-        builder.refreshFile(file);
+        file.refresh();
       }
     }
   }
-  async onRemove(builder: Builder.Internal, files: Set<Builder.SourceFile>): Promise<void> {
-    const component_path = NodePlatform_Path_Join(builder.dir.lib, 'components');
+  async onRemove(files: Set<Builder.File>): Promise<void> {
+    const component_path = NODE_PATH.join(Builder.Dir.Lib, 'components');
     let trigger_reprocess = false;
     for (const file of files) {
-      if (NodePlatform_Path_GetExtension(file.src_path.value) === '.html') {
-        if (file.src_path.value.startsWith(component_path)) {
-          this.component_map.delete(NodePlatform_Path_GetName(file.src_path.value));
+      const src_pathobject = NodePlatform_PathObject_Relative_Class(file.src_path);
+      if (src_pathobject.ext === '.html') {
+        if (file.src_path.startsWith(component_path)) {
+          this.component_map.delete(src_pathobject.name);
           trigger_reprocess = true;
         }
         this.htmlfile_set.delete(file);
@@ -46,25 +49,40 @@ class Class implements Builder.Processor {
     }
     if (trigger_reprocess === true) {
       for (const file of this.htmlfile_set) {
-        builder.refreshFile(file);
+        file.refresh();
       }
     }
   }
 
-  async onProcess(builder: Builder.Internal, file: Builder.SourceFile): Promise<void> {
+  async onProcess(file: Builder.File): Promise<void> {
     const source_html = (await file.getText()).trim();
     const source_node = HTML_UTIL.ParseDocument(source_html);
     let modified = false;
+    // process components
     for (const [component_name, component_file] of this.component_map) {
       const component_html = (await component_file.getText()).trim();
       const replacements = processCustomComponent(source_node, component_name, component_html);
       if (replacements > 0) {
-        builder.addDependency(component_file, file);
+        file.addUpstreamFile(component_file);
         modified = true;
       }
     }
+    // remap imports
+    for (const script of HTML_UTIL.QuerySelectorAll(source_node, 'script')) {
+      const src = HTML_UTIL.GetAttribute(script, 'src');
+      if (src !== undefined) {
+        const ext = NODE_PATH.parse(src).ext;
+        switch (ext) {
+          case '.ts':
+          case '.tsx':
+          case '.jsx':
+            HTML_UTIL.SetAttribute(script, 'src', `${src.slice(0, src.lastIndexOf(ext))}.js`);
+            modified = true;
+            break;
+        }
+      }
+    }
     if (modified === true) {
-      remapImports(source_node);
       file.setText(HTML_UTIL.GetHTML(source_node));
     }
   }
@@ -106,20 +124,4 @@ function processCustomComponent(source_node: HTML_UTIL.ClassDOMNode, component_n
     }
   }
   return replacements;
-}
-function remapImports(source_node: HTML_UTIL.ClassDOMNode): void {
-  for (const script of HTML_UTIL.QuerySelectorAll(source_node, 'script')) {
-    const src = HTML_UTIL.GetAttribute(script, 'src');
-    if (src !== undefined) {
-      const ext = NodePlatform_Path_GetExtension(src);
-      switch (ext) {
-        case '.js':
-        case '.jsx':
-        case '.ts':
-        case '.tsx':
-          HTML_UTIL.SetAttribute(script, 'src', `${src.slice(0, src.lastIndexOf(ext))}.js`);
-          break;
-      }
-    }
-  }
 }

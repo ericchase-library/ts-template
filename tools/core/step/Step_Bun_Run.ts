@@ -1,4 +1,5 @@
-import { Core_Array_Uint8_ToString, Core_Stream_Uint8_Async_ReadAll } from '../../../src/lib/ericchase/core.js';
+import { Core_Array_Uint8_To_String } from '../../../src/lib/ericchase/Core_Array_Uint8_To_String.js';
+import { Async_Core_Stream_Uint8_Read_All } from '../../../src/lib/ericchase/Core_Stream_Uint8_Read_All.js';
 import { Builder } from '../../core/Builder.js';
 import { Logger } from '../../core/Logger.js';
 
@@ -14,16 +15,16 @@ class Class implements Builder.Step {
     this.config.showlogs ??= true;
     this.config.stdin ??= 'ignore';
   }
-  async onRun(builder: Builder.Internal): Promise<void> {
+  async onRun(): Promise<void> {
     try {
       const p0 = Bun.spawn(this.config.cmd, { cwd: this.config.dir, stdin: this.config.stdin, stderr: 'pipe', stdout: 'pipe' });
       this.channel.log(`Run: "${this.config.cmd.join(' ')}" | Directory: "${this.config.dir}"`);
       await p0.exited;
-      this.channel.log(`End: "${this.config.cmd.join(' ')}" | Directory: "${this.config.dir}"`);
       if (this.config.showlogs === true) {
-        this.channel.errorNotEmpty(Core_Array_Uint8_ToString(await Core_Stream_Uint8_Async_ReadAll(p0.stderr)));
-        this.channel.logNotEmpty(Core_Array_Uint8_ToString(await Core_Stream_Uint8_Async_ReadAll(p0.stdout)));
+        this.channel.errorNotEmpty(Core_Array_Uint8_To_String(await Async_Core_Stream_Uint8_Read_All(p0.stderr)));
+        this.channel.logNotEmpty(Core_Array_Uint8_To_String(await Async_Core_Stream_Uint8_Read_All(p0.stdout)));
       }
+      this.channel.log(`End: "${this.config.cmd.join(' ')}" | Directory: "${this.config.dir}"`);
     } catch (error) {
       this.channel.error(`Command: "${this.config.cmd.join(' ')}" | Directory: "${this.config.dir}"`, error);
     }

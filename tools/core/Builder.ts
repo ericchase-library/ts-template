@@ -1,759 +1,660 @@
-import { Core_Map_GetOrDefault, Core_Promise_Orphan, Core_Utility_Debounce } from '../../src/lib/ericchase/core.js';
-import { BunPlatform_File_Async_ReadBytes, BunPlatform_File_Async_ReadText, BunPlatform_File_Async_WriteBytes, BunPlatform_File_Async_WriteText, BunPlatform_Glob_AsyncGen_Scan } from '../../src/lib/ericchase/platform-bun.js';
-import {
-  NODE_FS,
-  NodePlatform_Directory_Watch,
-  NodePlatform_Path_Async_GetStats,
-  NodePlatform_Path_Join,
-  NodePlatform_Path_JoinStandard,
-  NodePlatform_Path_Slice,
-  NodePlatform_Shell_Keys,
-  NodePlatform_Shell_StdIn_AddListener,
-  NodePlatform_Shell_StdIn_LockReader,
-  NodePlatform_Shell_StdIn_StartReaderInRawMode,
-} from '../../src/lib/ericchase/platform-node.js';
-import { CACHELOCK, FILESTATS } from './Cacher.js';
-import { AddLoggerOutputDirectory, Logger, WaitForLogger } from './Logger.js';
+import { Async_BunPlatform_File_Read_Bytes } from '../../src/lib/ericchase/BunPlatform_File_Read_Bytes.js';
+import { Async_BunPlatform_File_Read_Text } from '../../src/lib/ericchase/BunPlatform_File_Read_Text.js';
+import { Async_BunPlatform_File_Write_Bytes } from '../../src/lib/ericchase/BunPlatform_File_Write_Bytes.js';
+import { Async_BunPlatform_File_Write_Text } from '../../src/lib/ericchase/BunPlatform_File_Write_Text.js';
+import { Core_Map_Get_Or_Default } from '../../src/lib/ericchase/Core_Map_Get_Or_Default.js';
+import { NODE_PATH } from '../../src/lib/ericchase/NodePlatform.js';
+import { Async_NodePlatform_File_Delete } from '../../src/lib/ericchase/NodePlatform_File_Delete.js';
+import { NodePlatform_PathObject_Relative_Class } from '../../src/lib/ericchase/NodePlatform_PathObject_Relative_Class.js';
+import { NodePlatform_Shell_Keys } from '../../src/lib/ericchase/NodePlatform_Shell_Keys.js';
+import { NodePlatform_Shell_StdIn_AddListener, NodePlatform_Shell_StdIn_LockReader, NodePlatform_Shell_StdIn_StartReaderInRawMode } from '../../src/lib/ericchase/NodePlatform_Shell_StdIn.js';
+import { Async_Cacher_Watch_Directory, CACHELOCK, FILESTATS } from './Cacher.js';
+import { AddLoggerOutputDirectory, Logger } from './Logger.js';
 
 await AddLoggerOutputDirectory('cache');
 
-class ClassRawPath {
-  value: string;
-  constructor(...paths: string[]) {
-    this.value = NodePlatform_Path_Join(...paths);
-  }
-  toStandard() {
-    return NodePlatform_Path_JoinStandard(this.value);
-  }
+namespace _errors {
+  export const _dependency_cycle_ = (p0: string, p1: string) => `Dependency Cycle: Between upstream "${p0}" and downstream "${p1}"!`;
+  export const _dependency_cycle_self_ = (p0: string) => `Dependency Cycle: "${p0}" - A file cannot depend on itself!`;
+  export const _path_does_not_exist_ = (p0: string) => `Path "${p0}" does not exist!`;
+  export const _upstream_does_not_exist_ = (p0: string) => `Upstream path "${p0}" does not exist!`;
+  export const _upstream_not_in_src_ = (p0: string) => `Upstream path "${p0}" must reside in src directory!`;
 }
-class ClassRefCounter {
-  protected ref_set = new Set<object>();
-  protected onzerorefs_callback_set = new Set<() => void>();
-  getRef() {
-    const ref = {};
-    this.ref_set.add(ref);
-    return () => {
-      if (this.ref_set.delete(ref) && this.ref_set.size === 0) {
-        for (const callback of this.onzerorefs_callback_set) {
-          this.onzerorefs_callback_set.delete(callback);
-          callback();
-        }
-      }
-    };
-  }
-  onZeroRefs(): Promise<void> {
-    return new Promise<void>((resolve) => {
-      if (this.ref_set.size > 0) {
-        this.onzerorefs_callback_set.add(() => resolve());
-      } else {
-        resolve();
-      }
-    });
-  }
-}
-
-export function Builder(options?: { mode?: Builder.BUILD_MODE; verbosity?: Builder.LOG_VERBOSITY }) {
-  return new Builder.Class(options);
+namespace _logs {
+  export const _file_added_ = (p0: string) => `[add] "${p0}"`;
+  export const _file_refreshed_ = (p0: string) => `[refresh] "${p0}"`;
+  export const _file_removed_ = (p0: string) => `[remove] "${p0}"`;
+  export const _file_updated_ = (p0: string) => `[update] "${p0}"`;
+  export const _phase_begin_ = (p0: string) => `[begin] ${p0}`;
+  export const _phase_end_ = (p0: string) => `[end] ${p0}`;
+  export const _processor_onadd_ = (p0: string) => `[onAdd] ${p0}`;
+  export const _processor_oncleanup_ = (p0: string) => `[onCleanUp] ${p0}`;
+  export const _processor_onprocess_ = (p0: string, p1: string) => `[onProcess] ${p0} [for] "${p1}"`;
+  export const _processor_onremove_ = (p0: string) => `[onRemove] ${p0}`;
+  export const _processor_onstartup_ = (p0: string) => `[onStartUp] ${p0}`;
+  export const _scanning_dir_ = (p0: string) => `[scan] "${p0}"`;
+  export const _step_oncleanup_ = (p0: string) => `[onCleanUp] ${p0}`;
+  export const _step_onrun_ = (p0: string) => `[onRun] ${p0}`;
+  export const _step_onstartup_ = (p0: string) => `[onStartUp] ${p0}`;
+  export const _user_command_ = (p0: string) => `[command] "${p0}"`;
+  export const _watching_dir_ = (p0: string) => `[watch] "${p0}"`;
 }
 
 export namespace Builder {
-  export enum BUILD_MODE {
+  export enum MODE {
     BUILD,
     DEV,
   }
-  export enum LOG_VERBOSITY {
+  export enum VERBOSITY {
     _0_ERROR,
     _1_LOG,
     _2_DEBUG,
   }
-  export type ProcessorMethod = (builder: Internal, file: SourceFile) => Promise<void>;
+
   export interface Processor {
     ProcessorName: string;
-    onStartUp?: (builder: Internal) => Promise<void>;
-    onAdd?: (builder: Internal, files: Set<SourceFile>) => Promise<void>;
-    onRemove?: (builder: Internal, files: Set<SourceFile>) => Promise<void>;
-    onCleanUp?: (builder: Internal) => Promise<void>;
+    onStartUp?: () => Promise<void>;
+    onAdd?: (files: Set<Builder.File>) => Promise<void>;
+    onRemove?: (files: Set<Builder.File>) => Promise<void>;
+    onCleanUp?: () => Promise<void>;
   }
+
+  export type ProcessorMethod = (file: Builder.File) => Promise<void>;
+
   export interface Step {
     StepName: string;
-    onStartUp?: (builder: Internal) => Promise<void>;
-    onRun?: (builder: Internal) => Promise<void>;
-    onCleanUp?: (builder: Internal) => Promise<void>;
+    onStartUp?: () => Promise<void>;
+    onRun?: () => Promise<void>;
+    onCleanUp?: () => Promise<void>;
   }
-  export function RawPath(...paths: string[]) {
-    return new ClassRawPath(...paths);
-  }
-  export class Class {
-    $internal = new Internal(this);
 
-    constructor(options?: { mode?: BUILD_MODE; verbosity?: LOG_VERBOSITY }) {
-      if (options?.mode !== undefined) {
-        this.$internal.buildmode = options.mode;
-      }
-      if (options?.verbosity !== undefined) {
-        this.$internal.verbosity = options.verbosity;
-      }
-    }
-
-    dir = this.$internal.dir;
-    watchmode = this.$internal.buildmode;
-    verbosity = this.$internal.verbosity;
-
-    setStartUpSteps(...steps: Step[]): void {
-      this.$internal.startup_steps = steps;
-    }
-    setBeforeProcessingSteps(...steps: Step[]): void {
-      this.$internal.before_steps = steps;
-    }
-    setProcessorModules(...modules: Processor[]): void {
-      this.$internal.processor_modules = modules;
-    }
-    setAfterProcessingSteps(...steps: Step[]): void {
-      this.$internal.after_steps = steps;
-    }
-    setCleanUpSteps(...steps: Step[]): void {
-      this.$internal.cleanup_steps = steps;
-    }
-
-    async start(): Promise<void> {
-      await this.$internal.start();
-    }
-  }
-  namespace logs {
-    export const _file_added_ = (p0: string) => `[add] "${p0}"`;
-    export const _file_refreshed_ = (p0: string) => `[refresh] "${p0}"`;
-    export const _file_removed_ = (p0: string) => `[remov] "${p0}"`;
-    export const _file_updated_ = (p0: string) => `[update] "${p0}"`;
-    export const _phase_begin_ = (p0: string) => `[begin] ${p0}`;
-    export const _phase_end_ = (p0: string) => `[end] ${p0}`;
-    export const _processor_onadd_ = (p0: string) => `[onAdd] ${p0}`;
-    export const _processor_oncleanup_ = (p0: string) => `[onCleanUp] ${p0}`;
-    export const _processor_onprocess_ = (p0: string, p1: string) => `[onProcess] ${p0} [for] "${p1}"`;
-    export const _processor_onremove_ = (p0: string) => `[onRemove] ${p0}`;
-    export const _processor_onstartup_ = (p0: string) => `[onStartUp] ${p0}`;
-    export const _step_oncleanup_ = (p0: string) => `[onCleanUp] ${p0}`;
-    export const _step_onrun_ = (p0: string) => `[onRun] ${p0}`;
-    export const _step_onstartup_ = (p0: string) => `[onStartUp] ${p0}`;
-    export const _user_command_ = (p0: string) => `[command] "${p0}"`;
-    export const _watching_dir_ = (p0: string) => `[watch] "${p0}"`;
-  }
-  export class Internal {
-    channel = Logger('Builder').newChannel();
-
-    constructor(public external: Class) {}
-
-    buildmode = BUILD_MODE.BUILD;
-    verbosity = LOG_VERBOSITY._1_LOG;
-
-    // Directories
-
-    dir = {
-      lib: 'src/lib',
-      out: 'out',
-      src: 'src',
-      tools: 'tools',
-    };
-
-    // Build Steps & Processor Modules
-
-    startup_steps: Step[] = [];
-    before_steps: Step[] = [];
-    processor_modules: Processor[] = [];
-    after_steps: Step[] = [];
-    cleanup_steps: Step[] = [];
-
-    get all_steps() {
-      return [...this.startup_steps, ...this.before_steps, ...this.after_steps, ...this.cleanup_steps];
-    }
-
-    // Dependencies
-
-    $map_downstream_to_upstream = new Map<SourceFile, Set<SourceFile>>();
-    $map_upstream_to_downstream = new Map<SourceFile, Set<SourceFile>>();
-
-    addDependency(upstream: SourceFile, downstream: SourceFile) {
-      if (upstream === downstream) {
-        this.channel.error(`dependency cycle "${upstream.src_path.value}": a file cannot depend on itself`);
-        throw new Error();
-      }
-      if (this.$map_downstream_to_upstream.get(upstream)?.has(downstream)) {
-        this.channel.error(`dependency cycle between upstream "${upstream.src_path.value}" and downstream "${downstream.src_path.value}"`);
-        throw new Error();
-      }
-      Core_Map_GetOrDefault(this.$map_downstream_to_upstream, downstream, () => new Set<SourceFile>()).add(upstream);
-      Core_Map_GetOrDefault(this.$map_upstream_to_downstream, upstream, () => new Set<SourceFile>()).add(downstream);
-    }
-    removeDependency(upstream: SourceFile, downstream: SourceFile) {
-      Core_Map_GetOrDefault(this.$map_downstream_to_upstream, downstream, () => new Set<SourceFile>()).delete(upstream);
-      Core_Map_GetOrDefault(this.$map_upstream_to_downstream, upstream, () => new Set<SourceFile>()).delete(downstream);
-    }
-    getDownstream(file: SourceFile): Set<SourceFile> {
-      return this.$map_upstream_to_downstream.get(file) ?? new Set();
-    }
-    getUpstream(file: SourceFile): Set<SourceFile> {
-      return this.$map_downstream_to_upstream.get(file) ?? new Set();
-    }
-
-    // Files & Paths
-
-    $set_files = new Set<SourceFile>();
-    // raw src paths
-    $set_paths = new Set<string>();
-    // raw src paths to project files
-    $map_path_to_file = new Map<string, SourceFile>();
-
-    get files(): Set<SourceFile> {
-      return new Set(this.$set_files);
-    }
-    get paths(): Set<string> {
-      return new Set(this.$set_paths);
-    }
-    hasFile(file: SourceFile): boolean {
-      // @debug-start
-      const stored_file = this.$map_path_to_file.get(file.src_path.value);
-      if (stored_file !== undefined && stored_file !== file) {
-        this.channel.error(`file "${file.src_path.value}" different from stored file "${stored_file.src_path.value}"`);
-        throw new Error();
-      }
-      // @debug-end
-      return this.$map_path_to_file.has(file.src_path.value);
-    }
-    hasPath(src_path: ClassRawPath): boolean {
-      return this.$map_path_to_file.has(src_path.value);
-    }
-    getFile(src_path: ClassRawPath): SourceFile {
-      const project_file = this.$map_path_to_file.get(src_path.value);
-      if (project_file === undefined) {
-        this.channel.error(`file "${src_path.value}" does not exist`);
-        throw new Error();
-      }
-      return project_file;
-    }
-
-    addPath(src_path: ClassRawPath, out_path: ClassRawPath) {
-      // @debug-start
-      if (this.$map_path_to_file.has(src_path.value)) {
-        this.channel.error(`file "${src_path.value}" already added`);
-        throw new Error();
-      }
-      // @debug-end
-      const file = new SourceFile(this, src_path, out_path);
-      this.$map_path_to_file.set(src_path.value, file);
-      this.$set_files.add(file);
-      this.$set_paths.add(src_path.value);
-      this.$set_unprocessed_added_files.add(file);
-      if (this.verbosity >= LOG_VERBOSITY._1_LOG) {
-        this.channel.log(logs._file_added_(src_path.value));
-      }
-      return file;
-    }
-    removePath(src_path: ClassRawPath) {
-      // @debug-start
-      if (this.$map_path_to_file.has(src_path.value) === false) {
-        this.channel.error(`file "${src_path.value}" already removed`);
-        throw new Error();
-      }
-      // @debug-end
-      const file = this.getFile(src_path);
-      this.$map_path_to_file.delete(src_path.value);
-      this.$set_files.delete(file);
-      this.$set_paths.delete(src_path.value);
-      this.$set_unprocessed_removed_files.add(file);
-      for (const upstream of this.$map_downstream_to_upstream.get(file) ?? []) {
-        this.removeDependency(upstream, file);
-      }
-      for (const downstream of this.$map_upstream_to_downstream.get(file) ?? []) {
-        this.removeDependency(file, downstream);
-      }
-      this.$map_downstream_to_upstream.delete(file);
-      this.$map_upstream_to_downstream.delete(file);
-      if (this.verbosity >= LOG_VERBOSITY._1_LOG) {
-        this.channel.log(logs._file_removed_(src_path.value));
-      }
-      return file;
-    }
-    updatePath(src_path: ClassRawPath) {
-      const file = this.getFile(src_path);
-      this.$set_unprocessed_updated_files.add(file);
-      this.channel.log(logs._file_updated_(src_path.value));
-      return file;
-    }
-
-    refreshFile(file: SourceFile) {
-      this.$set_unprocessed_added_files.add(file); // trigger a first run
-      this.$set_unprocessed_updated_files.add(file);
-      // this.channel.log(logs._file_refreshed_(file.src_path.value));
-    }
-    updateFile(file: SourceFile) {
-      this.$set_unprocessed_updated_files.add(file);
-      // this.channel.log(logs._file_updated_file_(file.src_path.value));
-    }
-
-    // Source Watcher
-
-    $unwatchSource?: () => void;
-    async getStats(path: ClassRawPath): Promise<NODE_FS.Stats | undefined> {
-      try {
-        return await NodePlatform_Path_Async_GetStats(path.value);
-      } catch (error) {
-        return undefined;
-      }
-    }
-    setupSourceWatcher() {
-      if (this.$unwatchSource === undefined) {
-        const event_paths = new Set<string>();
-        const processEvents = Core_Utility_Debounce(async () => {
-          const releaseRef = this.$idle.getRef();
-
-          // copy the set and clear it
-          const event_paths_copy = new Set(event_paths);
-          event_paths.clear();
-
-          for (const path of event_paths_copy) {
-            const src_path = RawPath(this.dir.src, path);
-            const stats = await this.getStats(src_path);
-            if (stats?.isFile() === true) {
-              if (this.hasPath(src_path)) {
-                console.log('updating', src_path.value);
-                this.updatePath(src_path);
-              } else {
-                console.log('adding', src_path.value);
-                this.addPath(src_path, RawPath(this.dir.out, path));
-              }
-            }
-          }
-
-          const scan_paths = new Set<string>();
-          for await (const path of BunPlatform_Glob_AsyncGen_Scan('./', RawPath(`${this.dir.src}/**/*`).toStandard())) {
-            scan_paths.add(path);
-            if (this.$map_path_to_file.has(path) === false) {
-              this.addPath(RawPath(path), RawPath(this.dir.out, NodePlatform_Path_Slice(path, 1)));
-            }
-          }
-          for (const [path] of this.$map_path_to_file) {
-            if (scan_paths.has(path) === false) {
-              this.removePath(RawPath(path));
-            }
-          }
-
-          // Process Files
-          await this.$processUnprocessedFiles();
-
-          releaseRef();
-        }, 100);
-        this.$unwatchSource = NodePlatform_Directory_Watch(this.dir.src, (event, path) => {
-          event_paths.add(path);
-          Core_Promise_Orphan(processEvents());
-        });
-        if (this.verbosity >= LOG_VERBOSITY._1_LOG) {
-          this.channel.log(logs._watching_dir_(this.dir.src));
-        }
-      }
-    }
-
-    // Processing
-
-    $idle = new ClassRefCounter();
-
-    $set_unprocessed_added_files = new Set<SourceFile>();
-    $set_unprocessed_removed_files = new Set<SourceFile>();
-    $set_unprocessed_updated_files = new Set<SourceFile>();
-
-    async start() {
-      // Grab Locks
-      FILESTATS.LockTable();
-      CACHELOCK.TryLockEach(['Build', 'Format']);
-
-      try {
-        const releaseRef = this.$idle.getRef();
-
-        for await (const path of BunPlatform_Glob_AsyncGen_Scan(this.dir.src, '**/*')) {
-          this.addPath(new ClassRawPath(this.dir.src, path), new ClassRawPath(this.dir.out, path));
-        }
-
-        if (this.buildmode === BUILD_MODE.DEV) {
-          // Setup Source Watcher
-          this.setupSourceWatcher();
-          // Setup Stdin Reader
-          const releaseStdIn = NodePlatform_Shell_StdIn_LockReader();
-          NodePlatform_Shell_StdIn_AddListener(async (bytes, text, removeSelf) => {
-            if (text === 'q') {
-              removeSelf();
-              if (this.verbosity >= LOG_VERBOSITY._1_LOG) {
-                this.channel.log(logs._user_command_('Quit'));
-              }
-              await this.$idle.onZeroRefs();
-              this.$unwatchSource?.();
-              await this.$runCleanUpPhase();
-              // Release Locks
-              CACHELOCK.UnlockEach(['Build', 'Format']);
-              FILESTATS.UnlockTable();
-              releaseStdIn();
-            }
-          });
-          NodePlatform_Shell_StdIn_AddListener((bytes, text, removeSelf) => {
-            if (text === NodePlatform_Shell_Keys.SIGINT) {
-              removeSelf();
-              if (this.verbosity >= LOG_VERBOSITY._1_LOG) {
-                this.channel.log(logs._user_command_('Force Quit'));
-              }
-              this.$unwatchSource?.();
-              releaseStdIn();
-              process.exit();
-            }
-          });
-          NodePlatform_Shell_StdIn_StartReaderInRawMode();
-        }
-
-        await this.$runStartUpPhase();
-
-        // Process Files
-        await this.$processUnprocessedFiles();
-
-        if (this.buildmode === BUILD_MODE.BUILD) {
-          await this.$runCleanUpPhase();
-          // Release Locks
-          CACHELOCK.UnlockEach(['Build', 'Format']);
-          FILESTATS.UnlockTable();
-        }
-
-        releaseRef();
-      } catch (error) {
-        await WaitForLogger();
-        throw 'Errors during build. Check logs.';
-      }
-    }
-
-    async $runStartUpPhase() {
-      if (this.verbosity >= LOG_VERBOSITY._1_LOG) {
-        this.channel.log('...');
-        this.channel.log(logs._phase_begin_('StartUp'));
-      }
-      // All Steps onStartUp
-      for (const step of this.all_steps) {
-        await this.safe_step_onStartUp(step);
-      }
-      // StartUp Steps onRun
-      for (const step of this.startup_steps) {
-        await this.safe_step_onRun(step);
-      }
-      // All Processors onStartUp
-      for (const processor of this.processor_modules) {
-        await this.safe_processor_onStartUp(processor);
-      }
-      if (this.verbosity >= LOG_VERBOSITY._1_LOG) {
-        this.channel.log(logs._phase_end_('StartUp'));
-        this.channel.log('...');
-      }
-    }
-
-    async $runCleanUpPhase() {
-      if (this.verbosity >= LOG_VERBOSITY._1_LOG) {
-        this.channel.log(logs._phase_begin_('CleanUp'));
-      }
-      // All Processors onCleanUp
-      for (const processor of this.processor_modules) {
-        await this.safe_processor_onCleanUp(processor);
-      }
-      // CleanUp Steps onRun
-      for (const step of this.cleanup_steps) {
-        await this.safe_step_onRun(step);
-      }
-      // All Steps onCleanUp
-      for (const step of this.all_steps) {
-        await this.safe_step_onCleanUp(step);
-      }
-      if (this.verbosity >= LOG_VERBOSITY._1_LOG) {
-        this.channel.log(logs._phase_end_('CleanUp'));
-        this.channel.log('...');
-      }
-    }
-
-    async $processUnprocessedFiles() {
-      if (this.processor_modules.length > 0) {
-        if (this.$set_unprocessed_removed_files.size > 0) {
-          await this.$processRemovedFiles();
-        }
-        if (this.$set_unprocessed_added_files.size > 0) {
-          await this.$processAddedFiles();
-        }
-      }
-      for (const step of this.before_steps) {
-        await this.safe_step_onRun(step);
-      }
-      if (this.processor_modules.length > 0) {
-        if (this.$set_unprocessed_updated_files.size > 0) {
-          await this.$processUpdatedFiles();
-        }
-      }
-      for (const step of this.after_steps) {
-        await this.safe_step_onRun(step);
-      }
-      this.channel.newLine();
-    }
-
-    // always call processUpdatedFiles after this
-    async $processAddedFiles() {
-      if (this.verbosity >= LOG_VERBOSITY._1_LOG) {
-        this.channel.log(logs._phase_begin_('Process Added Files'));
-      }
-      const unprocessed_set = new Set(this.$set_unprocessed_added_files);
-      this.$set_unprocessed_added_files.clear();
-      for (const processor of this.processor_modules) {
-        await this.safe_processor_onAdd(processor, unprocessed_set);
-      }
-      const tasks: Promise<void>[] = [];
-
-      for (const file of unprocessed_set) {
-        file.resetBytes();
-        for (const { processor, method } of file.$processor_list) {
-          await this.safe_processor_onProcess(processor, method, file);
-        }
-      }
-      await Promise.allSettled(tasks);
-      if (this.verbosity >= LOG_VERBOSITY._1_LOG) {
-        this.channel.log(logs._phase_end_('Process Added Files'));
-        this.channel.log('...');
-      }
-    }
-
-    // always call processUpdatedFiles after this
-    async $processRemovedFiles() {
-      if (this.verbosity >= LOG_VERBOSITY._1_LOG) {
-        this.channel.log(logs._phase_begin_('Process Removed Files'));
-      }
-      const unprocessed_set = new Set(this.$set_unprocessed_removed_files);
-      this.$set_unprocessed_removed_files.clear();
-      for (const processor of this.processor_modules) {
-        await this.safe_processor_onRemove(processor, unprocessed_set);
-      }
-      if (this.verbosity >= LOG_VERBOSITY._1_LOG) {
-        this.channel.log(logs._phase_end_('Process Removed Files'));
-        this.channel.log('...');
-      }
-    }
-
-    async $processUpdatedFiles() {
-      if (this.verbosity >= LOG_VERBOSITY._1_LOG) {
-        this.channel.log(logs._phase_begin_('Process Updated Files'));
-      }
-
-      const unprocessed_file_set: Set<SourceFile> = (() => {
-        const set = new Set<SourceFile>();
-        for (const file of this.$set_unprocessed_updated_files) {
-          set.add(file);
-          for (const downstream_file of this.getDownstream(file)) {
-            set.add(downstream_file);
-          }
-        }
-        this.$set_unprocessed_updated_files.clear();
-        return set;
-      })();
-
-      const checkcount_map = new Map<SourceFile, number>();
-      while (unprocessed_file_set.size > 0) {
-        outer: for (const file of unprocessed_file_set) {
-          checkcount_map.set(file, Core_Map_GetOrDefault(checkcount_map, file, () => 0) + 1);
-          for (const upstream of this.getUpstream(file)) {
-            if (unprocessed_file_set.has(upstream)) {
-              continue outer;
-            }
-          }
-          file.resetBytes();
-          for (const { processor, method } of file.$processor_list) {
-            await this.safe_processor_onProcess(processor, method, file);
-          }
-          unprocessed_file_set.delete(file);
-        }
-      }
-      if (this.verbosity >= LOG_VERBOSITY._2_DEBUG) {
-        this.channel.log('  Dependency Tree Check Counter');
-        for (const [file, count] of checkcount_map) {
-          this.channel.log(`  - ${count.toString().padStart(2, '0')} "${file.src_path.value}"`);
-        }
-      }
-
-      if (this.verbosity >= LOG_VERBOSITY._1_LOG) {
-        this.channel.log(logs._phase_end_('Process Updated Files'));
-        this.channel.log('...');
-      }
-    }
-
-    private async safe_processor_onStartUp(processor: Processor) {
-      try {
-        if (this.verbosity >= LOG_VERBOSITY._2_DEBUG) {
-          this.channel.log(logs._processor_onstartup_(processor.ProcessorName));
-        }
-        await processor.onStartUp?.(this);
-      } catch (error) {
-        this.channel.error(error, `Unhandled exception in ${processor.ProcessorName} onStartUp:`);
-        throw new Error();
-      }
-    }
-    private async safe_processor_onAdd(processor: Processor, unprocessed_set: Set<SourceFile>) {
-      try {
-        if (this.verbosity >= LOG_VERBOSITY._2_DEBUG) {
-          this.channel.log(logs._processor_onadd_(processor.ProcessorName));
-        }
-        await processor.onAdd?.(this, unprocessed_set);
-      } catch (error) {
-        this.channel.error(error, `Unhandled exception in ${processor.ProcessorName} onAdd:`);
-        throw new Error();
-      }
-    }
-    private async safe_processor_onProcess(processor: Processor, method: ProcessorMethod, file: SourceFile) {
-      try {
-        if (this.verbosity >= LOG_VERBOSITY._2_DEBUG) {
-          this.channel.log(logs._processor_onprocess_(processor.ProcessorName, file.src_path.value));
-        }
-        await method.call(processor, this, file);
-      } catch (error) {
-        this.channel.error(error, `Unhandled exception in ${processor.ProcessorName} for "${file.src_path.value}":`);
-        throw new Error();
-      }
-    }
-    private async safe_processor_onRemove(processor: Processor, unprocessed_set: Set<SourceFile>) {
-      try {
-        if (this.verbosity >= LOG_VERBOSITY._2_DEBUG) {
-          this.channel.log(logs._processor_onremove_(processor.ProcessorName));
-        }
-        await processor.onRemove?.(this, unprocessed_set);
-      } catch (error) {
-        this.channel.error(error, `Unhandled exception in ${processor.ProcessorName} onRemove:`);
-        throw new Error();
-      }
-    }
-    private async safe_processor_onCleanUp(processor: Processor) {
-      try {
-        if (this.verbosity >= LOG_VERBOSITY._2_DEBUG) {
-          this.channel.log(logs._processor_oncleanup_(processor.ProcessorName));
-        }
-        await processor.onCleanUp?.(this);
-      } catch (error) {
-        this.channel.error(error, `Unhandled exception in ${processor.ProcessorName} onCleanUp:`);
-        throw new Error();
-      }
-    }
-
-    private async safe_step_onStartUp(step: Step) {
-      try {
-        if (this.verbosity >= LOG_VERBOSITY._2_DEBUG) {
-          this.channel.log(logs._step_onstartup_(step.StepName));
-        }
-        await step.onStartUp?.(this);
-      } catch (error) {
-        this.channel.error(error, `Unhandled exception in ${step.StepName} onStartUp:`);
-        throw new Error();
-      }
-    }
-    private async safe_step_onRun(step: Step) {
-      try {
-        if (this.verbosity >= LOG_VERBOSITY._2_DEBUG) {
-          this.channel.log(logs._step_onrun_(step.StepName));
-        }
-        await step.onRun?.(this);
-      } catch (error) {
-        this.channel.error(error, `Unhandled exception in ${step.StepName} onRun:`);
-        throw new Error();
-      }
-    }
-    private async safe_step_onCleanUp(step: Step) {
-      try {
-        if (this.verbosity >= LOG_VERBOSITY._2_DEBUG) {
-          this.channel.log(logs._step_oncleanup_(step.StepName));
-        }
-        await step.onCleanUp?.(this);
-      } catch (error) {
-        this.channel.error(error, `Unhandled exception in ${step.StepName} onCleanUp:`);
-        throw new Error();
-      }
-    }
-  }
-  export class SourceFile {
+  export class File {
     constructor(
-      public builder: Internal,
-      public src_path: ClassRawPath,
-      public out_path: ClassRawPath,
+      public src_path: string,
+      public out_path: string,
     ) {}
-
-    $processor_list: { processor: Processor; method: ProcessorMethod }[] = [];
-    addProcessor(processor: Processor, method: ProcessorMethod): void {
-      this.$processor_list.push({ processor, method });
-    }
-
+    $data: { bytes?: Uint8Array<ArrayBuffer>; text?: string } = { bytes: undefined, text: undefined };
+    $processor_list: { processor: Builder.Processor; method: Builder.ProcessorMethod }[] = [];
     /** When true, file contents have been modified during the current processing phase. */
-    ismodified = false;
+    ismodified = true;
     /** When false, $bytes/$text are no longer from the original file. */
     isoriginal = true;
-
-    $bytes?: Uint8Array;
-    $text?: string;
-
-    // Get cached contents or contents from file on disk as Uint8Array.
-    async getBytes(): Promise<Uint8Array> {
-      if (this.$bytes === undefined) {
-        if (this.$text === undefined) {
-          this.$bytes = await BunPlatform_File_Async_ReadBytes(this.src_path.value);
+    iswritable = true;
+    addProcessor(processor: Builder.Processor, method: Builder.ProcessorMethod): void {
+      this.$processor_list.push({ processor, method });
+    }
+    addUpstreamFile(upstream_file: File): void {
+      if (upstream_file === this) {
+        // ignore
+        // _channel.error(undefined, _errors._dependency_cycle_self_(upstream_file.src_path));
+        // throw new Error(_errors._dependency_cycle_self_(upstream_file.src_path));
+      } else {
+        if (map__downstream_to_upstream.get(upstream_file)?.has(this)) {
+          _channel.error(undefined, _errors._dependency_cycle_(upstream_file.src_path, this.src_path));
+          throw new Error(_errors._dependency_cycle_(upstream_file.src_path, this.src_path));
         } else {
-          this.$bytes = new TextEncoder().encode(this.$text);
-          this.$text = undefined;
+          Core_Map_Get_Or_Default(map__downstream_to_upstream, this, () => new Set<Builder.File>()).add(upstream_file);
+          Core_Map_Get_Or_Default(map__upstream_to_downstream, upstream_file, () => new Set<Builder.File>()).add(this);
         }
       }
-      return this.$bytes;
+    }
+    addUpstreamPath(upstream_path: string): void {
+      const relative_pathobject = NodePlatform_PathObject_Relative_Class(upstream_path);
+      const path = relative_pathobject.join();
+      if (path.startsWith(Builder.Dir.Src) !== true) {
+        _channel.error(undefined, _errors._upstream_not_in_src_(path));
+        throw new Error(_errors._upstream_not_in_src_(path));
+      } else {
+        const upstream_file = map__path_to_file.get(path);
+        if (upstream_file === undefined) {
+          _channel.error(undefined, _errors._upstream_does_not_exist_(path));
+          throw new Error(_errors._upstream_does_not_exist_(path));
+        } else {
+          this.addUpstreamFile(upstream_file);
+        }
+      }
+    }
+    getDownstreamFiles(): Set<File> {
+      return map__upstream_to_downstream.get(this) ?? new Set();
+    }
+    getUpstreamFiles(): Set<File> {
+      return map__downstream_to_upstream.get(this) ?? new Set();
+    }
+    // Get cached contents or contents from file on disk as Uint8Array.
+    async getBytes(): Promise<Uint8Array<ArrayBuffer>> {
+      if (this.$data.bytes === undefined) {
+        if (this.$data.text === undefined) {
+          const { error, value: bytes } = await Async_BunPlatform_File_Read_Bytes(this.src_path);
+          if (bytes !== undefined) {
+            this.$data.bytes = bytes;
+          } else {
+            throw error;
+          }
+        } else {
+          this.$data.bytes = new TextEncoder().encode(this.$data.text);
+          this.$data.text = undefined;
+        }
+      }
+      return this.$data.bytes;
     }
     // Get cached contents or contents from file on disk as string.
     async getText(): Promise<string> {
-      if (this.$text === undefined) {
-        if (this.$bytes === undefined) {
-          this.$text = await BunPlatform_File_Async_ReadText(this.src_path.value);
+      if (this.$data.text === undefined) {
+        if (this.$data.bytes === undefined) {
+          const { error, value: text } = await Async_BunPlatform_File_Read_Text(this.src_path);
+          if (text !== undefined) {
+            this.$data.text = text;
+          } else {
+            Err(error, _errors._path_does_not_exist_(this.src_path));
+            throw new Error();
+          }
         } else {
-          this.$text = new TextDecoder().decode(this.$bytes);
-          this.$bytes = undefined;
+          this.$data.text = new TextDecoder().decode(this.$data.bytes);
+          this.$data.bytes = undefined;
         }
       }
-      return this.$text;
+      return this.$data.text;
     }
-
+    // Treats the file as both newly added and updated during the next Process phase.
+    refresh(): void {
+      set__deleted_paths.add(this.src_path);
+      set__added_paths.add(this.src_path);
+    }
+    // Clears the cached contents and resets attributes.
+    resetBytes(): void {
+      this.isoriginal = true;
+      this.ismodified = true;
+      this.$data.bytes = undefined;
+      this.$data.text = undefined;
+    }
     // Set cached contents to Uint8Array.
-    setBytes(bytes: Uint8Array) {
+    setBytes(bytes: Uint8Array<ArrayBuffer>): void {
       this.isoriginal = false;
       this.ismodified = true;
-      this.$bytes = bytes;
-      this.$text = undefined;
-      this.builder.updateFile(this);
+      this.$data.bytes = bytes;
+      this.$data.text = undefined;
     }
     // Set cached contents to string.
-    setText(text: string) {
+    setText(text: string): void {
       this.isoriginal = false;
       this.ismodified = true;
-      this.$bytes = undefined;
-      this.$text = text;
-      this.builder.updateFile(this);
-    }
-
-    // Clears the cached contents and resets attributes.
-    resetBytes() {
-      this.isoriginal = true;
-      this.ismodified = false;
-      this.$bytes = undefined;
-      this.$text = undefined;
-    }
-
-    // Attempts to write cached contents to file on disk.
-    // Returns number of bytes written.
-    async write(): Promise<number> {
-      let byteswritten = 0;
-      if (this.$text !== undefined) {
-        byteswritten = await BunPlatform_File_Async_WriteText(this.out_path.value, this.$text);
-      } else {
-        byteswritten = await BunPlatform_File_Async_WriteBytes(this.out_path.value, await this.getBytes());
-      }
-      return byteswritten;
-    }
-
-    // Useful for some console log coercion.
-    toString(): string {
-      return this.src_path.toString();
+      this.$data.bytes = undefined;
+      this.$data.text = text;
     }
   }
+
+  export let Dir = {
+    get Lib() {
+      return _dir_lib;
+    },
+    set Lib(path: string) {
+      _dir_lib = NODE_PATH.join(path);
+    },
+    get Out() {
+      return _dir_out;
+    },
+    set Out(path: string) {
+      _dir_out = NODE_PATH.join(path);
+    },
+    get Src() {
+      return _dir_src;
+    },
+    set Src(path: string) {
+      _dir_src = NODE_PATH.join(path);
+    },
+    get Tools() {
+      return _dir_tools;
+    },
+    set Tools(path: string) {
+      _dir_tools = NODE_PATH.join(path);
+    },
+  };
+
+  export function GetMode(): Builder.MODE {
+    return _mode;
+  }
+  export function SetMode(mode: Builder.MODE): void {
+    _mode = mode;
+  }
+
+  export function GetVerbosity(): Builder.VERBOSITY {
+    return _verbosity;
+  }
+  export function SetVerbosity(verbosity: Builder.VERBOSITY): void {
+    _verbosity = verbosity;
+  }
+
+  export function SetStartUpSteps(...steps: Builder.Step[]): void {
+    array__startup_steps = steps;
+  }
+  export function SetBeforeProcessingSteps(...steps: Builder.Step[]): void {
+    array__before_steps = steps;
+  }
+  export function SetProcessorModules(...modules: Builder.Processor[]): void {
+    array__processor_modules = modules;
+  }
+  export function SetAfterProcessingSteps(...steps: Builder.Step[]): void {
+    array__after_steps = steps;
+  }
+  export function SetCleanUpSteps(...steps: Builder.Step[]): void {
+    array__cleanup_steps = steps;
+  }
+
+  export async function Start(): Promise<void> {
+    await Init();
+  }
+}
+
+let _dir_lib = 'src/lib';
+let _dir_out = 'out';
+let _dir_src = 'src';
+let _dir_tools = 'tools';
+
+let _channel = Logger('Builder').newChannel();
+let _mode = Builder.MODE.BUILD;
+let _verbosity = Builder.VERBOSITY._1_LOG;
+
+let array__startup_steps: Builder.Step[] = [];
+let array__before_steps: Builder.Step[] = [];
+let array__processor_modules: Builder.Processor[] = [];
+let array__after_steps: Builder.Step[] = [];
+let array__cleanup_steps: Builder.Step[] = [];
+
+let map__path_to_file = new Map<string, Builder.File>();
+let set__files = new Set<Builder.File>();
+let set__paths = new Set<string>();
+
+let map__downstream_to_upstream = new Map<Builder.File, Set<Builder.File>>();
+let map__upstream_to_downstream = new Map<Builder.File, Set<Builder.File>>();
+
+// const set__unprocessed_files_to_add = new Set<Builder.File>();
+// const set__unprocessed_files_to_update = new Set<Builder.File>();
+
+const set__added_paths = new Set<string>();
+const set__deleted_paths = new Set<string>();
+const set__modified_paths = new Set<string>();
+
+let unwatch_source_directory: () => void;
+let unlock_stdin_reader: () => void;
+
+async function Init() {
+  // Secure Locks
+  {
+    FILESTATS.LockTable();
+    CACHELOCK.TryLockEach(['Build', 'Format']);
+  }
+
+  // Setup Stdin Reader
+  {
+    unlock_stdin_reader = NodePlatform_Shell_StdIn_LockReader();
+    NodePlatform_Shell_StdIn_AddListener(async (bytes, text, removeSelf) => {
+      if (text === 'q') {
+        removeSelf();
+        Log(_logs._user_command_('Quit'));
+        await Async_CleanUp();
+      }
+    });
+    NodePlatform_Shell_StdIn_AddListener((bytes, text, removeSelf) => {
+      if (text === NodePlatform_Shell_Keys.SIGINT) {
+        removeSelf();
+        Log(_logs._user_command_('ForceQuit'));
+        ForceQuit();
+      }
+    });
+    NodePlatform_Shell_StdIn_StartReaderInRawMode();
+  }
+
+  // Scan Source Folder
+  {
+    Log(_logs._scanning_dir_(Builder.Dir.Src));
+    for (const subpath of await Array.fromAsync(
+      new Bun.Glob('**/*').scan({
+        absolute: false,
+        cwd: Builder.Dir.Src,
+        dot: true,
+        followSymlinks: false,
+        onlyFiles: true,
+        throwErrorOnBrokenSymlink: false,
+      }),
+    )) {
+      set__added_paths.add(NODE_PATH.join(Builder.Dir.Src, subpath));
+    }
+  }
+
+  await Async_StartUp();
+  await Async_Process();
+
+  switch (_mode) {
+    case Builder.MODE.BUILD:
+      await Async_CleanUp();
+      break;
+    case Builder.MODE.DEV:
+      await Async_SetupWatcher();
+      NodePlatform_Shell_StdIn_AddListener(async (bytes, text, removeSelf) => {
+        if (text === 'r') {
+          await Async_SetupWatcher();
+        }
+      });
+      break;
+  }
+}
+
+async function Async_SetupWatcher() {
+  unwatch_source_directory?.();
+  unwatch_source_directory = await Async_Cacher_Watch_Directory(Builder.Dir.Src, 250, 2_000, async (added, deleted, modified) => {
+    for (const path of added) {
+      set__added_paths.add(path);
+    }
+    for (const path of deleted) {
+      set__deleted_paths.add(path);
+    }
+    for (const path of modified) {
+      set__modified_paths.add(path);
+    }
+    if (set__added_paths.size > 0 || set__deleted_paths.size > 0 || set__modified_paths.size > 0) {
+      await Async_Process();
+    }
+  });
+}
+
+async function Async_StartUp() {
+  Log(_logs._phase_begin_('StartUp'));
+
+  // All Steps onStartUp
+  for (const step of [...array__startup_steps, ...array__before_steps, ...array__after_steps, ...array__cleanup_steps]) {
+    try {
+      Log(_logs._step_onstartup_(step.StepName), Builder.VERBOSITY._2_DEBUG);
+      await step.onStartUp?.();
+    } catch (error) {
+      Err(error, `Unhandled exception in ${step.StepName} onStartUp:`);
+      throw new Error();
+    }
+  }
+
+  // StartUp Steps onRun
+  for (const step of array__startup_steps) {
+    try {
+      Log(_logs._step_onrun_(step.StepName), Builder.VERBOSITY._2_DEBUG);
+      await step.onRun?.();
+    } catch (error) {
+      Err(error, `Unhandled exception in ${step.StepName} onRun:`);
+      throw new Error();
+    }
+  }
+
+  // Processor Modules onStartUp
+  for (const processor of array__processor_modules) {
+    try {
+      Log(_logs._processor_onstartup_(processor.ProcessorName), Builder.VERBOSITY._2_DEBUG);
+      await processor.onStartUp?.();
+    } catch (error) {
+      Err(error, `Unhandled exception in ${processor.ProcessorName} onStartUp:`);
+      throw new Error();
+    }
+  }
+
+  Log(_logs._phase_end_('StartUp'));
+  _channel.newLine();
+}
+
+async function Async_Process() {
+  Log(_logs._phase_begin_('Process'));
+
+  const temp__deleted_paths = new Set<string>(set__deleted_paths);
+  const temp__added_paths = new Set<string>(set__added_paths);
+  const temp__modified_paths = new Set<string>(set__modified_paths);
+
+  set__deleted_paths.clear();
+  set__added_paths.clear();
+  set__modified_paths.clear();
+
+  const set__files_to_remove = new Set<Builder.File>();
+  const set__files_to_add = new Set<Builder.File>();
+  const set__files_to_update = new Set<Builder.File>();
+
+  // Process Removed Files
+  {
+    for (const path of temp__deleted_paths) {
+      const file = map__path_to_file.get(path);
+      if (file !== undefined) {
+        set__files_to_remove.add(file);
+      } else {
+        Err(new Error(_errors._path_does_not_exist_(path)), _errors._path_does_not_exist_(path));
+      }
+    }
+    if (set__files_to_remove.size > 0) {
+      // Processor Modules onRemove
+      for (const processor of array__processor_modules) {
+        try {
+          Log(_logs._processor_onremove_(processor.ProcessorName), Builder.VERBOSITY._2_DEBUG);
+          await processor.onRemove?.(set__files_to_remove);
+        } catch (error) {
+          Err(error, `Unhandled exception in ${processor.ProcessorName} onRemove:`);
+          throw new Error();
+        }
+      }
+      for (const file of set__files_to_remove) {
+        map__path_to_file.delete(file.src_path);
+        set__files.delete(file);
+        set__paths.delete(file.src_path);
+        await Async_NodePlatform_File_Delete(file.out_path);
+        Log(_logs._file_removed_(file.src_path));
+      }
+    }
+  }
+
+  // Process Added Files
+  {
+    for (const path of temp__added_paths) {
+      const file = new Builder.File(path, NODE_PATH.join(Builder.Dir.Out, NODE_PATH.relative(Builder.Dir.Src, path)));
+      map__path_to_file.set(path, file);
+      set__files.add(file);
+      set__paths.add(path);
+      Log(_logs._file_added_(path));
+      set__files_to_add.add(file);
+      set__files_to_update.add(file);
+    }
+    if (set__files_to_add.size > 0) {
+      // Processor Modules onAdd
+      for (const processor of array__processor_modules) {
+        try {
+          Log(_logs._processor_onadd_(processor.ProcessorName), Builder.VERBOSITY._2_DEBUG);
+          await processor.onAdd?.(set__files_to_add);
+        } catch (error) {
+          Err(error, `Unhandled exception in ${processor.ProcessorName} onAdd:`);
+          throw new Error();
+        }
+      }
+      // Processor Modules onProcess
+      for (const file of set__files_to_add) {
+        file.resetBytes();
+        for (const { processor, method } of file.$processor_list) {
+          try {
+            Log(_logs._processor_onprocess_(processor.ProcessorName, file.src_path), Builder.VERBOSITY._2_DEBUG);
+            await method.call(processor, file);
+          } catch (error) {
+            Err(error, `Unhandled exception in ${processor.ProcessorName} for "${file.src_path}":`);
+            // throw new Error();
+          }
+        }
+      }
+      // Write Files
+      for (const file of set__files_to_add) {
+        if (file.iswritable === true) {
+          if (file.$data.text !== undefined) {
+            await Async_BunPlatform_File_Write_Text(file.out_path, file.$data.text);
+          } else {
+            await Async_BunPlatform_File_Write_Bytes(file.out_path, await file.getBytes());
+          }
+          file.ismodified = false;
+        }
+      }
+    }
+  }
+
+  // Process Updated Files
+  {
+    for (const path of temp__modified_paths) {
+      const file = map__path_to_file.get(path);
+      if (file !== undefined) {
+        Log(_logs._file_updated_(path));
+        set__files_to_update.add(file);
+      } else {
+        Err(new Error(_errors._path_does_not_exist_(path)), _errors._path_does_not_exist_(path));
+      }
+    }
+    if (set__files_to_update.size > 0) {
+      // Before Steps onRun
+      for (const step of array__before_steps) {
+        try {
+          Log(_logs._step_onrun_(step.StepName), Builder.VERBOSITY._2_DEBUG);
+          await step.onRun?.();
+        } catch (error) {
+          Err(error, `Unhandled exception in ${step.StepName} onRun:`);
+          throw new Error();
+        }
+      }
+      // Processor Modules onProcess
+      const set__unprocessed_files = new Set<Builder.File>();
+      for (const file of set__files_to_update) {
+        file.resetBytes();
+        set__unprocessed_files.add(file);
+        for (const downstream_file of file.getDownstreamFiles()) {
+          downstream_file.resetBytes();
+          set__unprocessed_files.add(downstream_file);
+          set__files_to_update.add(downstream_file);
+        }
+      }
+      while (set__unprocessed_files.size > 0) {
+        const task_fns: (() => Promise<void>)[] = [];
+        outer: for (const file of set__unprocessed_files) {
+          for (const upstream of file.getUpstreamFiles()) {
+            if (set__unprocessed_files.has(upstream)) {
+              continue outer;
+            }
+          }
+          task_fns.push(async () => {
+            for (const { processor, method } of file.$processor_list) {
+              try {
+                Log(_logs._processor_onprocess_(processor.ProcessorName, file.src_path), Builder.VERBOSITY._2_DEBUG);
+                await method.call(processor, file);
+              } catch (error) {
+                Err(error, `Unhandled exception in ${processor.ProcessorName} for "${file.src_path}":`);
+                // throw new Error();
+              }
+            }
+            set__unprocessed_files.delete(file);
+          });
+        }
+        const task_promises: Promise<void>[] = [];
+        for (const fn of task_fns) {
+          task_promises.push(fn());
+        }
+        await Promise.all(task_promises);
+      }
+      // Write Files
+      for (const file of set__files_to_update) {
+        if (file.iswritable === true && file.ismodified === true) {
+          if (file.$data.text !== undefined) {
+            await Async_BunPlatform_File_Write_Text(file.out_path, file.$data.text);
+          } else {
+            await Async_BunPlatform_File_Write_Bytes(file.out_path, await file.getBytes());
+          }
+          file.ismodified = false;
+        }
+      }
+      // After Steps onRun
+      for (const step of array__after_steps) {
+        try {
+          Log(_logs._step_onrun_(step.StepName), Builder.VERBOSITY._2_DEBUG);
+          await step.onRun?.();
+        } catch (error) {
+          Err(error, `Unhandled exception in ${step.StepName} onRun:`);
+          throw new Error();
+        }
+      }
+    }
+  }
+
+  if (set__added_paths.size > 0 || set__deleted_paths.size > 0 || set__modified_paths.size > 0) {
+    await Async_Process();
+  } else {
+    Log(_logs._phase_end_('Process'));
+    _channel.newLine();
+  }
+}
+
+async function Async_CleanUp() {
+  Log(_logs._phase_begin_('CleanUp'));
+
+  unwatch_source_directory?.();
+
+  // Processor Modules onCleanUp
+  for (const processor of array__processor_modules) {
+    try {
+      Log(_logs._processor_oncleanup_(processor.ProcessorName), Builder.VERBOSITY._2_DEBUG);
+      await processor.onCleanUp?.();
+    } catch (error) {
+      Err(error, `Unhandled exception in ${processor.ProcessorName} onCleanUp:`);
+      throw new Error();
+    }
+  }
+
+  // CleanUp Steps onRun
+  for (const step of array__cleanup_steps) {
+    try {
+      Log(_logs._step_onrun_(step.StepName), Builder.VERBOSITY._2_DEBUG);
+      await step.onRun?.();
+    } catch (error) {
+      Err(error, `Unhandled exception in ${step.StepName} onRun:`);
+      throw new Error();
+    }
+  }
+
+  // All Steps onCleanUp
+  for (const step of [...array__startup_steps, ...array__before_steps, ...array__after_steps, ...array__cleanup_steps]) {
+    try {
+      Log(_logs._step_oncleanup_(step.StepName), Builder.VERBOSITY._2_DEBUG);
+      await step.onCleanUp?.();
+    } catch (error) {
+      Err(error, `Unhandled exception in ${step.StepName} onCleanUp:`);
+      throw new Error();
+    }
+  }
+
+  unlock_stdin_reader?.();
+
+  // Release Locks
+  {
+    CACHELOCK.UnlockEach(['Build', 'Format']);
+    FILESTATS.UnlockTable();
+  }
+
+  Log(_logs._phase_end_('CleanUp'));
+  _channel.newLine();
+}
+
+function ForceQuit() {
+  Log('ForceQuit');
+
+  unwatch_source_directory?.();
+  unlock_stdin_reader?.();
+
+  // Release Locks
+  {
+    CACHELOCK.UnlockEach(['Build', 'Format']);
+    FILESTATS.UnlockTable();
+  }
+
+  process.exit();
+}
+
+function Log(text: string, verbosity = Builder.VERBOSITY._1_LOG) {
+  if (_verbosity >= verbosity) {
+    _channel.log(text);
+  }
+}
+
+function Err(error: any, text: string) {
+  _channel.error(error, text);
 }

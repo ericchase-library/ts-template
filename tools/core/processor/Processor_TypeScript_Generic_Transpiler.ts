@@ -1,10 +1,21 @@
-import { BunPlatform_Glob_Ex_Match } from '../../../src/lib/ericchase/platform-bun.js';
-import { NodePlatform_Path_NewExtension } from '../../../src/lib/ericchase/platform-node.js';
+import { BunPlatform_Glob_Match_Ex } from '../../../src/lib/ericchase/BunPlatform_Glob_Match_Ex.js';
+import { NodePlatform_PathObject_Relative_Class } from '../../../src/lib/ericchase/NodePlatform_PathObject_Relative_Class.js';
 import { Builder } from '../../core/Builder.js';
 import { Logger } from '../../core/Logger.js';
 
-export function Processor_TypeScript_Generic_Transpiler(include_patterns: string[], exclude_patterns: string[], config: Config): Builder.Processor {
-  return new Class(include_patterns, exclude_patterns, config);
+/**
+ * Scripts that match an include_pattern will be set as writable.\
+ * Scripts that match both an include_pattern and an exclude_pattern will be set as not writable.\
+ * Use Processor_Set_Writable to directly include or exclude file patterns for writing.
+ *
+ * @defaults
+ * @param include_patterns `[]`
+ * @param exclude_patterns `[]`
+ * @param config.define `undefined`
+ * @param config.target `"browser"`
+ */
+export function Processor_TypeScript_Generic_Transpiler(patterns: { include_patterns?: string[]; exclude_patterns?: string[] }, config?: Config): Builder.Processor {
+  return new Class(patterns.include_patterns ?? [], patterns.exclude_patterns ?? [], config ?? {});
 }
 class Class implements Builder.Processor {
   ProcessorName = Processor_TypeScript_Generic_Transpiler.name;
@@ -14,23 +25,31 @@ class Class implements Builder.Processor {
     readonly include_patterns: string[],
     readonly exclude_patterns: string[],
     readonly config: Config,
-  ) {}
-  async onAdd(builder: Builder.Internal, files: Set<Builder.SourceFile>): Promise<void> {
+  ) {
+    this.config.target ??= 'browser';
+  }
+  async onAdd(files: Set<Builder.File>): Promise<void> {
     for (const file of files) {
-      if (BunPlatform_Glob_Ex_Match(file.src_path.toStandard(), this.include_patterns, this.exclude_patterns) === true) {
-        file.out_path.value = NodePlatform_Path_NewExtension(file.out_path.value, '.js');
+      const src_path = NodePlatform_PathObject_Relative_Class(file.src_path).join();
+      if (BunPlatform_Glob_Match_Ex(src_path, this.exclude_patterns, []) === true) {
+        file.iswritable = false;
+        continue;
+      }
+      if (BunPlatform_Glob_Match_Ex(src_path, this.include_patterns, []) === true) {
+        file.iswritable = true;
+        file.out_path = NodePlatform_PathObject_Relative_Class(file.out_path).replaceExt('.js').join();
         file.addProcessor(this, this.onProcess);
       }
     }
   }
 
-  async onProcess(builder: Builder.Internal, file: Builder.SourceFile): Promise<void> {
+  async onProcess(file: Builder.File): Promise<void> {
     try {
       const text = await file.getText();
       const transpiled_text = await new Bun.Transpiler({
         define: typeof this.config.define === 'function' ? this.config.define() : this.config.define,
         loader: 'tsx',
-        target: this.config.target ?? 'browser',
+        target: this.config.target,
         // disable any altering processes
         deadCodeElimination: false,
         inline: false,
@@ -42,7 +61,7 @@ class Class implements Builder.Processor {
       }).transform(text);
       file.setText(transpiled_text);
     } catch (error) {
-      this.channel.error(`ERROR: Builder.Processor: ${__filename}, File: ${file.src_path.value}`, error);
+      this.channel.error(`ERROR: Builder.Processor: ${__filename}, File: ${file.src_path}`, error);
     }
   }
 }
