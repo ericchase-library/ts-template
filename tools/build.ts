@@ -1,9 +1,9 @@
 import { BunPlatform_Args_Has } from '../src/lib/ericchase/BunPlatform_Args_Has.js';
+import { Step_Dev_Format } from './core-dev/step/Step_Dev_Format.js';
+import { Step_Dev_Server } from './core-web/step/Step_Dev_Server.js';
 import { Builder } from './core/Builder.js';
 import { Step_Bun_Run } from './core/step/Step_Bun_Run.js';
 import { Step_FS_Clean_Directory } from './core/step/Step_FS_Clean_Directory.js';
-import { Step_Dev_Format } from './lib-dev/step/Step_Dev_Format.js';
-import { Step_Dev_Server } from './lib-web/step/Step_Dev_Server.js';
 
 // Use command line arguments to set dev mode.
 if (BunPlatform_Args_Has('--dev')) {

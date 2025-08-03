@@ -1,26 +1,16 @@
 # prettier ignores files setup in .gitignore
 
-# use biome for these
-# https://biomejs.dev/internals/language-support/
-*.js
-*.ts
-*.jsx
-*.tsx
-*.json
-*.jsonc
-*.css
-*.graphqls
-*.graphql
-
 # probably don't want to format your hand written documents
 coverage/
 docs/
-examples/
 
 # don't want to format lock files
 bun.lock
 *-lock.json
 *-lock.yaml
+
+# processor bundles
+tools/core-web/bundle/
 
 # up to you whether you want to format the resulting files
 out/

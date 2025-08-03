@@ -13,6 +13,7 @@
   "scripts": {
     "build": "bun run tools/build.ts",
     "dev": "bun run tools/build.ts --dev",
+    "format": "bun prettier --write .",
     "pull": "bun run tools/pull.ts"
   },
   "type": "module"
