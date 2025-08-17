@@ -1,7 +1,6 @@
 import { BunPlatform_Args_Has } from '../src/lib/ericchase/BunPlatform_Args_Has.js';
 import { Step_Dev_Format } from './core-dev/step/Step_Dev_Format.js';
 import { Step_Dev_Project_Update_Config } from './core-dev/step/Step_Dev_Project_Update_Config.js';
-import { Step_Dev_Server } from './core-web/step/Step_Dev_Server.js';
 import { Builder } from './core/Builder.js';
 import { Step_Bun_Run } from './core/step/Step_Bun_Run.js';
 import { Step_FS_Clean_Directory } from './core/step/Step_FS_Clean_Directory.js';
@@ -31,10 +30,7 @@ Builder.SetBeforeProcessingSteps();
 Builder.SetProcessorModules();
 
 // These steps are run after each processing phase.
-Builder.SetAfterProcessingSteps(
-  Step_Dev_Server(),
-  //
-);
+Builder.SetAfterProcessingSteps();
 
 // These steps are run during the cleanup phase only.
 Builder.SetCleanUpSteps();
