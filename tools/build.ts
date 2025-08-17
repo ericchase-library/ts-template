@@ -26,7 +26,8 @@ Builder.SetStartUpSteps(
 // These steps are run before each processing phase.
 Builder.SetBeforeProcessingSteps();
 
-// The processors are run for every file that added them during every processing phase.
+// The processors are run for every file that added them during every
+// processing phase.
 Builder.SetProcessorModules();
 
 // These steps are run after each processing phase.
@@ -35,7 +36,7 @@ Builder.SetAfterProcessingSteps(
   //
 );
 
-// These steps are run during the shutdown phase only.
+// These steps are run during the cleanup phase only.
 Builder.SetCleanUpSteps();
 
 await Builder.Start();
