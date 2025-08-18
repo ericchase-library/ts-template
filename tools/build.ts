@@ -5,6 +5,9 @@ import { Builder } from './core/Builder.js';
 import { Step_Bun_Run } from './core/step/Step_Bun_Run.js';
 import { Step_FS_Clean_Directory } from './core/step/Step_FS_Clean_Directory.js';
 
+// If needed, add `cache` directory to the logger's file writer.
+// await AddLoggerOutputDirectory('cache');
+
 // Use command line arguments to set developer mode.
 if (BunPlatform_Args_Has('--dev')) {
   Builder.SetMode(Builder.MODE.DEV);
