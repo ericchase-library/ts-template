@@ -1,4 +1,4 @@
-import { BunPlatform_Args_Has } from '../src/lib/ericchase/BunPlatform_Args_Has.js';
+import { BunPlatform_Argv_Includes } from '../src/lib/ericchase/BunPlatform_Argv_Includes.js';
 import { Step_Dev_Format } from './core-dev/step/Step_Dev_Format.js';
 import { Step_Dev_Project_Update_Config } from './core-dev/step/Step_Dev_Project_Update_Config.js';
 import { Builder } from './core/Builder.js';
@@ -9,7 +9,7 @@ import { Step_FS_Clean_Directory } from './core/step/Step_FS_Clean_Directory.js'
 // await AddLoggerOutputDirectory('cache');
 
 // Use command line arguments to set developer mode.
-if (BunPlatform_Args_Has('--dev')) {
+if (BunPlatform_Argv_Includes('--dev')) {
   Builder.SetMode(Builder.MODE.DEV);
 }
 // Set the logging verbosity
